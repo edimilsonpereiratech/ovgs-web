@@ -26,10 +26,7 @@ export function OrderStatusStepper({ status }: { status: OrderStatus }) {
                 {isDone ? <Check className="h-4 w-4" /> : index + 1}
               </div>
               <span
-                className={cn(
-                  'text-xs font-medium',
-                  isCurrent ? 'text-text' : 'text-text-muted',
-                )}
+                className={cn('text-xs font-medium', isCurrent ? 'text-text' : 'text-text-muted')}
               >
                 {ORDER_STATUS_CONFIG[step].label}
               </span>

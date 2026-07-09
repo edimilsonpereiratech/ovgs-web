@@ -47,7 +47,10 @@ export function OrderTable({ orders, clientsById, transportTypesById }: OrderTab
             </TableCell>
             <TableCell className="text-text-muted">{formatDateTime(order.createdAt)}</TableCell>
             <TableCell className="text-right">
-              <Link href={`/ordens/${order.id}`} className="text-sm font-medium text-primary hover:underline">
+              <Link
+                href={`/ordens/${order.id}`}
+                className="text-sm font-medium text-primary hover:underline"
+              >
                 Ver detalhes
               </Link>
             </TableCell>

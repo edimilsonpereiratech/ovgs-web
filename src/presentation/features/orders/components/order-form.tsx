@@ -20,7 +20,13 @@ interface OrderFormProps {
   onSubmit: (input: CreateOrderInput) => void
 }
 
-export function OrderForm({ clients, transportTypes, items, isSubmitting, onSubmit }: OrderFormProps) {
+export function OrderForm({
+  clients,
+  transportTypes,
+  items,
+  isSubmitting,
+  onSubmit,
+}: OrderFormProps) {
   const {
     register,
     control,
@@ -65,7 +71,9 @@ export function OrderForm({ clients, transportTypes, items, isSubmitting, onSubm
         disabled={authorizedTransportTypes.length === 0}
         {...register('transportTypeId')}
       >
-        {authorizedTransportTypes.length === 0 && <option value="">Nenhum transporte autorizado</option>}
+        {authorizedTransportTypes.length === 0 && (
+          <option value="">Nenhum transporte autorizado</option>
+        )}
         {authorizedTransportTypes.map((type) => (
           <option key={type.id} value={type.id}>
             {type.name}

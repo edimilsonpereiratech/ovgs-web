@@ -33,7 +33,12 @@ export function ClientForm({
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-4">
-      <Input label="Nome" placeholder="Razão social" error={errors.name?.message} {...register('name')} />
+      <Input
+        label="Nome"
+        placeholder="Razão social"
+        error={errors.name?.message}
+        {...register('name')}
+      />
       <Input
         label="Documento"
         placeholder="CNPJ/CPF"

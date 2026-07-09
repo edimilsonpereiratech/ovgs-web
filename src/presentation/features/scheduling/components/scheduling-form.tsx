@@ -50,7 +50,9 @@ export function SchedulingForm({ isSubmitting, onSubmit }: SchedulingFormProps) 
             value={STANDARD_DELIVERY_WINDOWS.findIndex(
               (window) => window.start === field.value.start,
             )}
-            onChange={(event) => field.onChange(STANDARD_DELIVERY_WINDOWS[Number(event.target.value)])}
+            onChange={(event) =>
+              field.onChange(STANDARD_DELIVERY_WINDOWS[Number(event.target.value)])
+            }
           >
             {STANDARD_DELIVERY_WINDOWS.map((window, index) => (
               <option key={window.start} value={index}>

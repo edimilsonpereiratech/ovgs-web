@@ -18,7 +18,7 @@ export function MetricCard({ label, value, colorToken }: MetricCardProps) {
   return (
     <div
       className={cn(
-        'rounded-lg border border-border bg-surface p-4 shadow-sm border-l-4',
+        'rounded-lg border border-l-4 border-border bg-surface p-4 shadow-sm',
         BORDER_CLASSES[colorToken],
       )}
     >

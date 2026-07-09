@@ -86,7 +86,12 @@ export function OrdersListPage() {
               transportTypesById={transportTypesById}
             />
             <div className="mt-4">
-              <Pagination page={page} pageSize={PAGE_SIZE} total={data.total} onPageChange={setPage} />
+              <Pagination
+                page={page}
+                pageSize={PAGE_SIZE}
+                total={data.total}
+                onPageChange={setPage}
+              />
             </div>
           </>
         )}

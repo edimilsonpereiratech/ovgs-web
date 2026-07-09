@@ -23,8 +23,18 @@ export function ItemForm({ isSubmitting, onSubmit }: ItemFormProps) {
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-4">
-      <Input label="SKU" placeholder="Ex.: SKU-0001" error={errors.sku?.message} {...register('sku')} />
-      <Input label="Nome" placeholder="Nome do item" error={errors.name?.message} {...register('name')} />
+      <Input
+        label="SKU"
+        placeholder="Ex.: SKU-0001"
+        error={errors.sku?.message}
+        {...register('sku')}
+      />
+      <Input
+        label="Nome"
+        placeholder="Nome do item"
+        error={errors.name?.message}
+        {...register('name')}
+      />
       <Button type="submit" disabled={isSubmitting} className="mt-2">
         {isSubmitting ? 'Salvando...' : 'Adicionar item'}
       </Button>

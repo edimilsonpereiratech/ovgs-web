@@ -44,7 +44,9 @@ export function ItemsPage() {
       <Drawer open={drawerOpen} onOpenChange={setDrawerOpen} title="Novo item">
         <ItemForm
           isSubmitting={createMutation.isPending}
-          onSubmit={(input) => createMutation.mutate(input, { onSuccess: () => setDrawerOpen(false) })}
+          onSubmit={(input) =>
+            createMutation.mutate(input, { onSuccess: () => setDrawerOpen(false) })
+          }
         />
       </Drawer>
     </div>

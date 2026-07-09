@@ -33,7 +33,8 @@ export function OrderSummaryCard({ order, client, transportType }: OrderSummaryC
         <div className="col-span-2 sm:col-span-4">
           <p className="text-xs text-text-muted">Agendamento</p>
           <p className="mt-1 text-sm font-medium text-text">
-            {formatDate(order.scheduling.deliveryDate)} · {formatDeliveryWindow(order.scheduling.timeWindow)}
+            {formatDate(order.scheduling.deliveryDate)} ·{' '}
+            {formatDeliveryWindow(order.scheduling.timeWindow)}
           </p>
         </div>
       )}

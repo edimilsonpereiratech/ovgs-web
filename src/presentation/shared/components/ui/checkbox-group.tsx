@@ -27,7 +27,9 @@ export function CheckboxGroup({ label, options, value, onChange, error }: Checkb
           error && 'border-error',
         )}
       >
-        {options.length === 0 && <span className="text-sm text-text-muted">Nenhuma opção disponível.</span>}
+        {options.length === 0 && (
+          <span className="text-sm text-text-muted">Nenhuma opção disponível.</span>
+        )}
         {options.map((option) => (
           <label key={option.id} className="flex items-center gap-2 text-sm text-text">
             <input

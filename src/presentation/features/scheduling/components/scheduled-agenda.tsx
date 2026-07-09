@@ -29,7 +29,8 @@ export function ScheduledAgenda({
           <div className="flex flex-col gap-2">
             {group.orders.map((order) => {
               const sameWindowCount = group.orders.filter(
-                (candidate) => candidate.scheduling?.timeWindow.start === order.scheduling?.timeWindow.start,
+                (candidate) =>
+                  candidate.scheduling?.timeWindow.start === order.scheduling?.timeWindow.start,
               ).length
               const nearCapacity = sameWindowCount >= MAX_DELIVERIES_PER_WINDOW
 

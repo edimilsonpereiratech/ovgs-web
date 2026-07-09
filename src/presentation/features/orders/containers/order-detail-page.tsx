@@ -46,7 +46,8 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
   const client = clients?.find((candidate) => candidate.id === order?.clientId)
   const transportType = transportTypes?.find((candidate) => candidate.id === order?.transportTypeId)
   const authorizedTransportTypes = useMemo(
-    () => (transportTypes ?? []).filter((type) => client?.authorizedTransportTypeIds.includes(type.id)),
+    () =>
+      (transportTypes ?? []).filter((type) => client?.authorizedTransportTypeIds.includes(type.id)),
     [transportTypes, client],
   )
 
@@ -104,7 +105,11 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
         )}
 
         {(order.status === 'PLANEJADA' || order.status === 'AGENDADA') && (
-          <Button variant="secondary" disabled={isProcessing} onClick={() => setSchedulingOpen(true)}>
+          <Button
+            variant="secondary"
+            disabled={isProcessing}
+            onClick={() => setSchedulingOpen(true)}
+          >
             {order.status === 'PLANEJADA' ? 'Confirmar agendamento' : 'Reagendar entrega'}
           </Button>
         )}
@@ -129,7 +134,10 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
                 (transportDraft || order.transportTypeId) === order.transportTypeId
               }
               onClick={() =>
-                updateTransportMutation.mutate({ orderId: order.id, transportTypeId: transportDraft })
+                updateTransportMutation.mutate({
+                  orderId: order.id,
+                  transportTypeId: transportDraft,
+                })
               }
             >
               Atualizar
