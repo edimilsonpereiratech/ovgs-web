@@ -14,6 +14,7 @@
     ]
   },
   "rules": {
+    "@typescript-eslint/no-unused-vars": ["error", { "argsIgnorePattern": "^_" }],
     "boundaries/dependencies": [
       "error",
       {
@@ -30,14 +31,18 @@
           {
             "from": { "element": { "types": "infrastructure" } },
             "allow": {
-              "to": { "element": { "types": { "anyOf": ["domain", "application", "infrastructure"] } } }
+              "to": {
+                "element": { "types": { "anyOf": ["domain", "application", "infrastructure"] } }
+              }
             }
           },
           {
             "from": { "element": { "types": "store" } },
             "allow": {
               "to": {
-                "element": { "types": { "anyOf": ["domain", "application", "infrastructure", "store"] } }
+                "element": {
+                  "types": { "anyOf": ["domain", "application", "infrastructure", "store"] }
+                }
               }
             }
           },
@@ -47,7 +52,14 @@
               "to": {
                 "element": {
                   "types": {
-                    "anyOf": ["domain", "application", "infrastructure", "store", "lib", "presentation"]
+                    "anyOf": [
+                      "domain",
+                      "application",
+                      "infrastructure",
+                      "store",
+                      "lib",
+                      "presentation"
+                    ]
                   }
                 }
               }
@@ -61,7 +73,9 @@
             "from": { "element": { "types": "app" } },
             "allow": {
               "to": {
-                "element": { "types": { "anyOf": ["presentation", "store", "lib", "domain", "app"] } }
+                "element": {
+                  "types": { "anyOf": ["presentation", "store", "lib", "domain", "app"] }
+                }
               }
             }
           }
