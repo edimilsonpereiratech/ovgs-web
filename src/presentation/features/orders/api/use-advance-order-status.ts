@@ -14,6 +14,7 @@ export function useAdvanceOrderStatus() {
   const dispatch = useAppDispatch()
 
   return useMutation({
+    mutationKey: ['orders', 'advance-status'],
     mutationFn: (order: Order) => advanceOrderStatus(orderHttpRepository, order),
     onSuccess: (updated) => {
       queryClient.invalidateQueries({ queryKey: orderKeys.all })

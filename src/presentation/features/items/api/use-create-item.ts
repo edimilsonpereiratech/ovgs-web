@@ -12,6 +12,7 @@ export function useCreateItem() {
   const dispatch = useAppDispatch()
 
   return useMutation({
+    mutationKey: ['items', 'create'],
     mutationFn: (input: CreateItemInput) => itemHttpRepository.create(input),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: itemKeys.all })

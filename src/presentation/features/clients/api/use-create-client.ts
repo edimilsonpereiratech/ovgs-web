@@ -12,6 +12,7 @@ export function useCreateClient() {
   const dispatch = useAppDispatch()
 
   return useMutation({
+    mutationKey: ['clients', 'create'],
     mutationFn: (input: CreateClientInput) => clientHttpRepository.create(input),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: clientKeys.all })

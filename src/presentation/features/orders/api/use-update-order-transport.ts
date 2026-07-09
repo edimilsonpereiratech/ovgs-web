@@ -17,6 +17,7 @@ export function useUpdateOrderTransport() {
   const dispatch = useAppDispatch()
 
   return useMutation({
+    mutationKey: ['orders', 'update-transport'],
     mutationFn: ({ orderId, transportTypeId }: UpdateOrderTransportVariables) =>
       orderHttpRepository.updateTransport(orderId, transportTypeId),
     onSuccess: (updated) => {

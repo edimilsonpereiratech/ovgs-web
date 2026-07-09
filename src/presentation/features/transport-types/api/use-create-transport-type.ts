@@ -12,6 +12,7 @@ export function useCreateTransportType() {
   const dispatch = useAppDispatch()
 
   return useMutation({
+    mutationKey: ['transport-types', 'create'],
     mutationFn: (input: CreateTransportTypeInput) => transportTypeHttpRepository.create(input),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: transportTypeKeys.all })

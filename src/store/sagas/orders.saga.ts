@@ -8,6 +8,7 @@ import type { PaginatedResult } from '@application/ports/order.repository'
 import type { Order } from '@domain/entities/order'
 import { isSchedulingCapacityExceeded } from '@domain/rules/scheduling-capacity'
 import { orderHttpRepository } from '@infrastructure/repositories/order.http-repository'
+import { logger } from '@lib/logger'
 import { notify } from '@store/slices/notifications.slice'
 import {
   schedulingConflictAcknowledged,
@@ -20,6 +21,7 @@ import {
 
 function* runSchedulingFlow(action: PayloadAction<SchedulingRequestPayload>) {
   const { order, input, mode } = action.payload
+  logger.info('Fluxo de agendamento iniciado', { orderId: order.id, mode, input })
 
   try {
     const existing: PaginatedResult<Order> = yield call(orderHttpRepository.list, {
@@ -35,11 +37,16 @@ function* runSchedulingFlow(action: PayloadAction<SchedulingRequestPayload>) {
     ).length
 
     if (isSchedulingCapacityExceeded(sameWindowCount)) {
+      logger.warn('Conflito de capacidade detectado', { orderId: order.id, sameWindowCount })
       yield put(schedulingConflictDetected({ count: sameWindowCount }))
 
       const resolution: PayloadAction<{ proceed: boolean }> = yield take(
         schedulingConflictAcknowledged.type,
       )
+      logger.info('Conflito de capacidade resolvido pelo usuário', {
+        orderId: order.id,
+        proceed: resolution.payload.proceed,
+      })
 
       if (!resolution.payload.proceed) {
         yield put(schedulingFailed('Agendamento cancelado pelo usuário'))
@@ -52,6 +59,7 @@ function* runSchedulingFlow(action: PayloadAction<SchedulingRequestPayload>) {
         ? yield call(confirmScheduling, orderHttpRepository, order, input)
         : yield call(rescheduleScheduling, orderHttpRepository, order, input)
 
+    logger.info('Fluxo de agendamento concluído', { orderId: updated.id, mode })
     yield put(schedulingSucceeded(updated))
     yield put(
       notify(
@@ -61,6 +69,7 @@ function* runSchedulingFlow(action: PayloadAction<SchedulingRequestPayload>) {
     )
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Erro ao processar agendamento'
+    logger.error('Fluxo de agendamento falhou', { orderId: order.id, mode, error: message })
     yield put(schedulingFailed(message))
     yield put(notify('error', message))
   }

@@ -41,7 +41,7 @@
             "allow": {
               "to": {
                 "element": {
-                  "types": { "anyOf": ["domain", "application", "infrastructure", "store"] }
+                  "types": { "anyOf": ["domain", "application", "infrastructure", "store", "lib"] }
                 }
               }
             }

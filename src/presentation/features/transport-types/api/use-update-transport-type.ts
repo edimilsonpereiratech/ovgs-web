@@ -17,6 +17,7 @@ export function useUpdateTransportType() {
   const dispatch = useAppDispatch()
 
   return useMutation({
+    mutationKey: ['transport-types', 'update'],
     mutationFn: ({ id, input }: UpdateTransportTypeVariables) =>
       transportTypeHttpRepository.update(id, input),
     onSuccess: () => {

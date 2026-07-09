@@ -17,6 +17,7 @@ export function useUpdateClient() {
   const dispatch = useAppDispatch()
 
   return useMutation({
+    mutationKey: ['clients', 'update'],
     mutationFn: ({ id, input }: UpdateClientVariables) => clientHttpRepository.update(id, input),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: clientKeys.all })

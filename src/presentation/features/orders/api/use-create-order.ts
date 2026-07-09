@@ -19,6 +19,7 @@ export function useCreateOrder() {
   const dispatch = useAppDispatch()
 
   return useMutation({
+    mutationKey: ['orders', 'create'],
     mutationFn: ({ client, input }: CreateOrderVariables) =>
       createOrder(orderHttpRepository, client, input),
     onSuccess: () => {
