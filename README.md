@@ -7,14 +7,15 @@ components, dark mode e uma API REST inteiramente simulada por MSW.
 > Não existe backend real neste repositório. Toda a "API" descrita em
 > [`public/openapi.yaml`](public/openapi.yaml) e navegável em `/api-docs` é
 > servida por [MSW](https://mswjs.io) (`src/infrastructure/mocks`), rodando
-> tanto no browser (dev/produção) quanto no Node (testes de integração). Isso
-> permite validar o fluxo completo — requisição HTTP real via `axios`,
-> serialização, status codes, erros — sem depender de infraestrutura externa.
+> tanto no browser (dev/produção) quanto no Node (testes de integração). Assim
+> o fluxo completo — requisição HTTP via `axios`, serialização, status codes,
+> erros — é validado de ponta a ponta sem depender de infraestrutura externa.
 
 ## Sumário
 
 - [Stack e por quê](#stack-e-por-quê)
 - [Arquitetura](#arquitetura)
+- [Modelagem do domínio](#modelagem-do-domínio)
 - [React Query vs. Redux Saga](#react-query-vs-redux-saga)
 - [Design system e dark mode](#design-system-e-dark-mode)
 - [Estrutura de pastas](#estrutura-de-pastas)
@@ -24,6 +25,7 @@ components, dark mode e uma API REST inteiramente simulada por MSW.
 - [Persistência](#persistência)
 - [Escalabilidade e performance](#escalabilidade-e-performance)
 - [Observabilidade](#observabilidade)
+- [Segurança e autorização](#segurança-e-autorização)
 - [Docker](#docker)
 - [CI](#ci)
 - [Decisões e trade-offs](#decisões-e-trade-offs)
@@ -43,9 +45,9 @@ components, dark mode e uma API REST inteiramente simulada por MSW.
 
 ## Arquitetura
 
-O código segue **Clean Architecture / DDD** com quatro camadas e regras de
-dependência **impostas em tempo de lint** por `eslint-plugin-boundaries`
-(veja `.eslintrc.json`):
+O código segue Clean Architecture / DDD com quatro camadas. As regras de
+dependência entre elas são impostas em tempo de lint pelo `eslint-plugin-boundaries`
+(veja `.eslintrc.json`), não apenas documentadas em texto:
 
 ```
 domain          → sem dependências externas. Entidades (Zod), value objects,
@@ -67,49 +69,86 @@ app             → rotas do Next.js (App Router). Só compõe containers de
                    `presentation`, sem lógica própria.
 ```
 
-Regra de dependência: `domain ← application ← infrastructure ← presentation ← app`,
-mais `store` podendo ser usado por `presentation`/`app`. Isso é validado pelo
-próprio `next lint`, então uma tentativa de importar `infrastructure` dentro de
-`domain`, por exemplo, quebra o CI.
+A regra de dependência é `domain ← application ← infrastructure ← presentation ← app`,
+com `store` liberado para `presentation`/`app`. Uma tentativa de importar
+`infrastructure` dentro de `domain`, por exemplo, quebra o lint (e o CI).
 
 ### Imports absolutos
 
-Aliases dedicados por camada (`@domain/*`, `@application/*`,
-`@infrastructure/*`, `@presentation/*`, `@store/*`, `@lib/*`, além do `@/*`
-genérico) eliminam `../../../..` e, combinados com o `boundaries/elements` do
-ESLint, tornam a violação de camada visível já no import.
+Cada camada tem seu próprio alias (`@domain/*`, `@application/*`,
+`@infrastructure/*`, `@presentation/*`, `@store/*`, `@lib/*`, mais o `@/*`
+genérico para o resto). Isso elimina os `../../../..` de sempre e, combinado
+com `boundaries/elements` do ESLint, faz a violação de camada aparecer já no
+import, antes de qualquer revisão manual.
+
+## Modelagem do domínio
+
+Cada entidade nasce como um schema Zod em `domain/entities` (`Order`,
+`Client`, `Item`, `TransportType`, `Scheduling`, `AuditLog`). O schema é a
+fonte única da verdade: o tipo TypeScript é derivado dele via `z.infer`, então
+não existe risco de tipo e validação runtime saírem de sincronia — coisa comum
+quando se escreve a interface manualmente e a validação separada.
+
+As decisões de negócio, por sua vez, ficam isoladas em `domain/rules` como
+funções puras que recebem entidades e devolvem uma decisão, sem tocar em
+estado, rede ou React:
+
+- `order-state-machine.ts` decide qual é a próxima transição válida de status
+  (`CRIADA → PLANEJADA → AGENDADA → EM_TRANSITO → ENTREGUE`), impedindo saltos
+  fora de ordem.
+- `transport-auth.ts` verifica se um cliente pode usar determinado tipo de
+  transporte.
+- `scheduling-capacity.ts` calcula se uma janela de entrega já está no limite
+  de pedidos simultâneos.
+
+Violações dessas regras não são apenas `throw new Error('mensagem genérica')`:
+cada uma tem uma classe própria em `domain/errors`
+(`InvalidTransitionError`, `TransportNotAuthorizedError`,
+`SchedulingNotAllowedError`, `DuplicateSkuError`), todas herdando de
+`DomainError`. Isso deixa explícito, no tipo do erro, qual regra foi violada —
+o `error-mapper` em `infrastructure/http` faz o caminho inverso, traduzindo o
+código de erro HTTP mockado de volta para essas mesmas classes, então a UI
+trata sempre o mesmo conjunto de erros de domínio, venha ela de uma validação
+local ou de uma resposta do "servidor".
+
+Value objects como `OrderStatus` e `DeliveryWindow` carregam sua própria
+formatação e configuração de exibição (`ORDER_STATUS_CONFIG`, janelas padrão
+de entrega), evitando que cada componente reimplemente "o que esse status
+significa" com um `switch` espalhado pela UI.
 
 ## React Query vs. Redux Saga
 
-Os dois convivem porque resolvem problemas diferentes:
+Os dois convivem porque resolvem problemas diferentes.
 
-- **React Query** cobre todo o CRUD simples (clientes, itens, tipos de
-  transporte, listagem/detalhe de ordens): uma requisição, um resultado, cache
-  e invalidação. Usar Saga aqui seria reimplementar cache manualmente.
-- **Redux Saga** entra apenas no fluxo de **agendamento de entrega**
-  (`store/sagas/orders.saga.ts`), que é um processo com múltiplos passos e uma
-  decisão de negócio no meio do caminho: (1) disparar a confirmação/reagendamento,
-  (2) checar client-side se a janela de entrega já está no limite de
-  capacidade (`domain/rules/scheduling-capacity.ts`) usando as ordens já
-  carregadas, (3) se estiver no limite, pausar e abrir um diálogo de conflito
-  perguntando se o usuário quer prosseguir mesmo assim, e só então (4) seguir
-  com a chamada HTTP. Esse tipo de orquestração — pausar um efeito no meio,
-  esperar uma decisão da UI, retomar — é exatamente o que sagas modelam bem
-  com `take`/`put` e é desconfortável de expressar só com hooks de mutação.
-  O hook `useSchedulingFlow` (`presentation/features/scheduling/api`) é a ponte:
-  ele despacha as actions da saga e, ao observar o estado global mudar,
-  atualiza o cache do React Query — assim o restante da aplicação continua
-  lendo dados de ordens de uma única fonte.
+React Query cobre todo o CRUD simples: clientes, itens, tipos de transporte,
+listagem e detalhe de ordens. Uma requisição, um resultado, cache e
+invalidação — usar Saga aqui seria reimplementar cache manualmente.
+
+Redux Saga entra apenas no fluxo de agendamento de entrega
+(`store/sagas/orders.saga.ts`), porque esse é o único ponto do sistema onde
+existe uma orquestração real: disparar a confirmação ou reagendamento; checar
+no cliente, com as ordens já carregadas, se a janela de entrega bateu no
+limite de capacidade (`domain/rules/scheduling-capacity.ts`); se bateu, pausar
+o fluxo e abrir um diálogo de conflito perguntando se o usuário quer seguir
+mesmo assim; só então concluir com a chamada HTTP. Pausar um efeito no meio,
+esperar uma decisão da UI e retomar é exatamente o que sagas modelam bem com
+`take`/`put`, e fica desconfortável de expressar só com callbacks de mutação.
+
+A ponte entre os dois mundos é o hook `useSchedulingFlow`
+(`presentation/features/scheduling/api`): ele despacha as actions da saga e,
+ao observar o estado global mudar, atualiza o cache do React Query. Assim o
+resto da aplicação continua lendo dados de ordens de uma única fonte,
+independentemente de qual dos dois mecanismos originou a mudança.
 
 ## Design system e dark mode
 
 Cores, espaçamento e tipografia vivem como CSS variables em `globals.css`,
-consumidas pelo Tailwind via `tailwind.config.ts`. Dark mode é a mesma paleta
-com os tokens re-mapeados sob a classe `.dark` — nenhum componente conhece a
-diferença entre os dois temas, apenas usa classes como `bg-surface` ou
+consumidas pelo Tailwind via `tailwind.config.ts`. O dark mode usa a mesma
+paleta com os tokens remapeados sob a classe `.dark`; nenhum componente
+conhece a diferença entre os dois temas, só usa classes como `bg-surface` ou
 `text-text-muted`. Um script inline no `<head>` (`app/layout.tsx`) aplica a
-classe antes da hidratação para evitar flash de tema errado, e a preferência é
-persistida em `localStorage` (`presentation/shared/hooks/use-theme.ts`).
+classe antes da hidratação para evitar flash do tema errado, e a preferência
+fica salva em `localStorage` (`presentation/shared/hooks/use-theme.ts`).
 
 ## Estrutura de pastas
 
@@ -127,7 +166,7 @@ src/
     shared/                   design system (button, table, drawer, toast, ...)
     test-utils/                helpers de teste (providers)
   store/                      Redux Toolkit slices + sagas
-  lib/                        utilitários genéricos (datas, query keys, cn)
+  lib/                        utilitários genéricos (datas, query keys, cn, logger)
 public/
   openapi.yaml                 contrato REST (fonte para o Swagger UI)
   mockServiceWorker.js          service worker gerado pelo MSW
@@ -143,9 +182,9 @@ cp .env.example .env.local   # já vem com os defaults corretos
 npm run dev
 ```
 
-Abra http://localhost:3000 — o MSW inicializa automaticamente no browser
+Abra http://localhost:3000. O MSW inicializa automaticamente no browser
 (`NEXT_PUBLIC_ENABLE_MSW=true`) e popula um conjunto realista de clientes,
-tipos de transporte, itens, ordens (em todos os status) e logs de auditoria.
+tipos de transporte, itens, ordens em todos os status e logs de auditoria.
 
 Scripts disponíveis:
 
@@ -167,94 +206,138 @@ npm run format:check         # Prettier --check
 npm run test
 ```
 
-- **Unidade** — regras de domínio puras (`order-state-machine`,
-  `scheduling-capacity`, `transport-auth`), casos de uso de `application`
-  (criação de ordem, avanço de status, agendamento) e o mapeador de erros
-  HTTP → domínio, todos testados sem nenhuma dependência de React ou rede.
-- **Integração** — containers renderizados com React Testing Library sobre
-  providers reais (React Query + Redux), com o MSW interceptando as
-  requisições HTTP de fato (mesmos handlers usados em dev). Cobrem, por
-  exemplo, listar/criar um tipo de transporte via drawer e criar uma ordem de
-  venda respeitando a regra de transporte autorizado por cliente.
+Testes de unidade cobrem as regras de domínio puras (`order-state-machine`,
+`scheduling-capacity`, `transport-auth`), os casos de uso de `application`
+(criação de ordem, avanço de status, agendamento) e o mapeador de erros HTTP →
+domínio — nenhum deles depende de React ou de rede, então rodam em
+milissegundos e servem de rede de segurança para qualquer refatoração futura
+das regras de negócio.
+
+Testes de integração renderizam os containers com React Testing Library sobre
+providers reais (React Query + Redux + toasts), com o MSW interceptando as
+requisições de fato — os mesmos handlers usados em desenvolvimento. Hoje
+cobrem tipos de transporte, clientes (incluindo o checkbox de autorização de
+transporte), itens (incluindo a rejeição de SKU duplicado pelo handler) e a
+criação de uma ordem de venda respeitando o transporte autorizado por cliente.
 
 MSW v2 depende de APIs Web (`fetch`, `Request`, `BroadcastChannel`, streams)
-que o ambiente `jsdom` do Jest não fornece por padrão — `jest.setup.ts`
-poliflla essas APIs a partir dos módulos nativos do Node. Os pacotes ESM-only
+que o `jsdom` do Jest não fornece por padrão; `jest.setup.ts` faz o polyfill
+dessas APIs a partir dos módulos nativos do Node. Os pacotes ESM-only
 transitivos do MSW são transpilados via `transpilePackages` no
-`next.config.mjs`, mecanismo oficial do `next/jest` para isso (evita duplicar
-configuração de Babel/SWC).
+`next.config.mjs`, o mecanismo oficial do `next/jest` para isso (evita
+duplicar configuração de Babel/SWC).
 
 ## Documentação da API
 
-O contrato REST completo (todos os endpoints, schemas de request/response e
-códigos de erro usados pelo `error-mapper`) está em
-[`public/openapi.yaml`](public/openapi.yaml) e é navegável interativamente em
-`/api-docs` (Swagger UI) — também linkado na sidebar do app. Esse documento é
-a referência para uma futura implementação real do backend: os handlers MSW
-em `src/infrastructure/mocks/handlers` seguem exatamente esse contrato.
+O contrato REST completo — endpoints, schemas de request/response e os
+códigos de erro usados pelo `error-mapper` — está em
+[`public/openapi.yaml`](public/openapi.yaml) e pode ser navegado
+interativamente em `/api-docs` (Swagger UI), também linkado na sidebar do
+app. Esse documento é a referência para uma futura implementação real do
+backend: os handlers MSW em `src/infrastructure/mocks/handlers` seguem
+exatamente esse contrato.
 
 ## Persistência
 
-Não há banco de dados: os handlers MSW (`src/infrastructure/mocks/handlers`)
+Não há banco de dados. Os handlers MSW (`src/infrastructure/mocks/handlers`)
 guardam o estado das entidades em arrays em memória, seedados uma vez por
 sessão do worker (`src/infrastructure/mocks/fixtures`) e mutados pelos
-próprios handlers a cada POST/PATCH — por isso criar uma ordem ou avançar um
-status "persiste" durante a sessão do browser, mas é perdido ao recarregar o
-service worker do zero. A única persistência real hoje é a preferência de
-tema (`localStorage`, `presentation/shared/hooks/use-theme.ts`).
+próprios handlers a cada POST/PATCH. Criar uma ordem ou avançar um status
+"persiste" durante a sessão do browser, mas se perde ao recarregar o service
+worker do zero. A única persistência real hoje é a preferência de tema
+(`localStorage`, `presentation/shared/hooks/use-theme.ts`).
 
-O ponto relevante para uma evolução futura é que nenhuma camada acima de
-`infrastructure` sabe disso: `application` só conhece os ports de repositório
-(`application/ports/*.repository.ts`), então trocar o MSW por um backend real
-com Postgres/Prisma é reescrever `infrastructure/repositories` (a
-implementação HTTP já existe e não mudaria) sem tocar em casos de uso,
+O ponto que importa para uma evolução futura é que nenhuma camada acima de
+`infrastructure` sabe disso. `application` só conhece os ports de repositório
+(`application/ports/*.repository.ts`); trocar o MSW por um backend real com
+Postgres, por exemplo, significa reescrever `infrastructure/repositories`
+(a implementação HTTP já existe e não mudaria) sem tocar em casos de uso,
 componentes ou testes de domínio/aplicação.
 
 ## Escalabilidade e performance
 
-- **Paginação server-side** — a listagem de ordens (`GET /orders`) aceita
-  `page`/`pageSize` e filtros (status, cliente, transporte, período) no
-  próprio handler MSW, evitando trazer a base inteira para o cliente; o
-  mesmo contrato está documentado em `openapi.yaml` para quando existir uma
-  API real.
-- **Cache e `staleTime` por tipo de dado** (`lib/query-client.ts`,
-  `presentation/features/*/api/*.keys.ts`) — cadastros que mudam pouco
-  (clientes, itens, tipos de transporte) e listagens de ordens compartilham o
-  mesmo `QueryClient`, mas a invalidação é granular por `queryKey`, então
-  atualizar uma ordem não invalida o cache de clientes/itens.
-- **Memoização de dados derivados** — mapas (`Map<id, entidade>`) usados para
-  cruzar ordens com clientes/itens/tipos de transporte nas telas de detalhe,
-  monitoramento e agendamento são construídos com `useMemo`, evitando
-  recomputar a cada re-render.
-- **Code-splitting automático** — cada rota do App Router já é um chunk
-  separado; a página `/api-docs` isola a dependência pesada
-  `swagger-ui-react` do bundle principal do dashboard.
-- **Próximo passo natural** — se o volume de ordens crescer bastante,
-  virtualização de lista (`@tanstack/react-virtual`) na tabela de ordens seria
-  o próximo ajuste; não foi feito agora porque a paginação já resolve o
-  volume esperado para o desafio.
+A listagem de ordens (`GET /orders`) aceita `page`/`pageSize` e filtros de
+status, cliente, transporte e período no próprio handler MSW, então o cliente
+nunca busca a base inteira — o mesmo contrato já está em `openapi.yaml` para
+quando existir uma API real por trás. Cadastros que mudam pouco (clientes,
+itens, tipos de transporte) e listagens de ordens compartilham o mesmo
+`QueryClient`, mas a invalidação é granular por `queryKey`: atualizar uma
+ordem não invalida o cache de clientes ou itens.
+
+Dados derivados que cruzam entidades — por exemplo, mapear ordens para seus
+clientes e transportes nas telas de detalhe, monitoramento e agendamento —
+são construídos com `useMemo` em vez de recalculados a cada render. Cada rota
+do App Router já sai como um chunk separado, e a página `/api-docs` isola a
+dependência pesada `swagger-ui-react` do bundle principal do dashboard.
+
+Se o volume de ordens crescer além do que a paginação resolve bem, o próximo
+ajuste natural seria virtualizar a tabela (`@tanstack/react-virtual`); não fiz
+isso agora porque não havia necessidade real no escopo do desafio.
 
 ## Observabilidade
 
-Existe um port `Logger` com um adapter de console (`src/lib/logger.ts`) —
-trocar para um provedor real (Sentry, Datadog, um endpoint de log próprio)
-significa escrever um novo adapter que implementa a mesma interface, sem
-tocar em quem consome `logger`. Ele está conectado em quatro pontos:
+Existe um port `Logger` com um adapter de console (`src/lib/logger.ts`).
+Trocar para um provedor real — Sentry, Datadog, um endpoint de log próprio —
+é escrever um novo adapter que implementa a mesma interface, sem alterar quem
+consome `logger`. Ele está ligado em alguns pontos concretos do app:
 
-- **React Query** (`lib/query-client.ts`) — `QueryCache`/`MutationCache`
-  logam toda falha de busca (com a `queryKey`) e toda mutação concluída/com
-  erro (com um `mutationKey` por operação, ex. `['orders', 'create']`).
-- **Saga de agendamento** (`store/sagas/orders.saga.ts`) — loga os pontos de
-  decisão do fluxo: início, conflito de capacidade detectado, resolução do
-  usuário (prosseguir ou cancelar) e sucesso/erro final.
-- **Web Vitals** (`app/web-vitals-reporter.tsx`, via `next/web-vitals`) —
-  reporta métricas de performance (LCP, CLS, INP etc.) assim que disponíveis.
-- **Navegação e interações** — `PageViewLogger`
-  (`app/page-view-logger.tsx`) loga toda mudança de rota, e o `Button`
-  compartilhado aceita uma prop opcional `trackingEvent` que loga a
-  interação no clique; ela é usada nas ações de negócio mais relevantes
-  (criar ordem, avançar status, atualizar transporte, abrir/confirmar/
-  reagendar agendamento) sem exigir alteração nos outros usos do componente.
+React Query loga toda falha de busca (com a `queryKey`) e toda mutação
+concluída ou com erro (com um `mutationKey` por operação, como
+`['orders', 'create']`) direto no `QueryCache`/`MutationCache`
+(`lib/query-client.ts`). A saga de agendamento loga seus pontos de decisão —
+início do fluxo, conflito de capacidade detectado, resposta do usuário ao
+conflito, sucesso ou erro final (`store/sagas/orders.saga.ts`). O
+`WebVitalsReporter` (`app/web-vitals-reporter.tsx`) usa `next/web-vitals` para
+reportar métricas de performance (LCP, CLS, INP) assim que o browser as
+calcula, e o `PageViewLogger` (`app/page-view-logger.tsx`) loga toda mudança
+de rota via `usePathname`.
+
+Para interações específicas, o `Button` compartilhado aceita uma prop
+opcional `trackingEvent` que loga o clique sem exigir mudança nos outros usos
+do componente; está aplicada nas ações de negócio mais relevantes (criar
+ordem, avançar status, atualizar transporte, abrir/confirmar/reagendar
+agendamento).
+
+Esses logs técnicos (erros, web vitals, navegação, interações) são o lado
+"quão bem o sistema está se comportando". O lado "o que está acontecendo com
+o negócio" é a página de **Monitoramento Operacional**
+(`presentation/features/monitoring`), que cruza as métricas de ordens por
+status com os mesmos filtros de cliente, transporte e período usados na
+listagem — junto com a **Auditoria** (`presentation/features/audit`), que
+registra cada mutação relevante como um evento no histórico da ordem. Juntos,
+os dois lados dão tanto o dado agregado para o time de operação quanto o
+rastro técnico para debugar um caso específico.
+
+## Segurança e autorização
+
+Autenticação de usuário (login, sessão, papéis) está fora do escopo do
+desafio e não foi simulada — não faria sentido montar isso sobre uma API
+inteiramente mockada. O que existe, e que é o que efetivamente muda de
+comportamento na aplicação, é autorização de negócio: a regra "este cliente
+só pode usar estes tipos de transporte" (`domain/rules/transport-auth.ts`) é
+aplicada no caso de uso de criação de ordem (`application/orders/create-order.use-case.ts`)
+e refletida na UI como consequência — a lista de transportes disponíveis no
+formulário já vem filtrada pelo cliente selecionado, então a interface nunca
+decide por conta própria o que é permitido.
+
+Toda entrada de formulário passa por um schema Zod antes de chegar em
+qualquer lógica de negócio (React Hook Form + `zodResolver`), e o mesmo schema
+valida de novo no handler MSW — a mesma dupla validação (cliente e "servidor")
+que existiria contra uma API real. Erros do servidor mockado voltam com um
+código estruturado (`DUPLICATE_SKU`, `TRANSPORT_NOT_AUTHORIZED`, etc.) que o
+`error-mapper` traduz para uma classe de domínio conhecida, em vez de expor
+mensagem ou stack trace crus ao usuário.
+
+Em `next.config.mjs`, `headers()` aplica um conjunto básico de headers de
+segurança em todas as rotas: `X-Content-Type-Options: nosniff`,
+`X-Frame-Options: DENY`, `Referrer-Policy: strict-origin-when-cross-origin`,
+`Permissions-Policy` restringindo câmera/microfone/geolocalização, e uma
+Content-Security-Policy. A CSP relaxa `script-src`/`style-src` com
+`'unsafe-inline'` de propósito: o script de bootstrap do tema em
+`app/layout.tsx` precisa ser inline para rodar antes da hidratação (evitar
+flash do tema errado), e o `swagger-ui-react` injeta estilos inline. Uma CSP
+mais estrita exigiria nonce por request, o que não se paga para um projeto
+sem backend real por trás.
 
 ## Docker
 
@@ -263,7 +346,7 @@ docker compose up --build
 ```
 
 O `Dockerfile` usa build multi-stage com a saída `standalone` do Next.js
-(imagem final `node:20-alpine` sem devDependencies). Por não haver backend
+(imagem final `node:20-alpine`, sem devDependencies). Como não há backend
 real, o MSW continua habilitado por padrão dentro do container
 (`NEXT_PUBLIC_ENABLE_MSW=true`); para apontar para uma API real, sobrescreva
 os build args:
@@ -276,43 +359,34 @@ docker build --build-arg NEXT_PUBLIC_API_URL=https://api.exemplo.com \
 ## CI
 
 `.github/workflows/ci.yml` roda em push/PR para `main`: formatação, lint,
-type-check e testes (com cobertura) em um job; build de produção do Next.js
-em outro; e um build da imagem Docker (sem publicar) em um terceiro — os três
-últimos dependem do primeiro passar. O pipeline usa apenas `npm ci`/scripts
-padrão, então portar para Azure Pipelines, GitLab CI ou qualquer outro runner
-é uma questão de reescrever a sintaxe dos steps, não a lógica.
+type-check e testes com cobertura em um job; build de produção do Next.js em
+outro; build da imagem Docker (sem publicar) em um terceiro. Os dois últimos
+dependem do primeiro passar. O pipeline usa só `npm ci` e scripts padrão, então
+portar para Azure Pipelines, GitLab CI ou qualquer outro runner é reescrever a
+sintaxe dos steps, não a lógica.
 
 ## Decisões e trade-offs
 
-- **Sem backend real** — assumido pelo enunciado do desafio; MSW substitui a
+- **Sem backend real.** Assumido pelo enunciado do desafio. O MSW substitui a
   API mantendo o cliente HTTP (`axios`) e o mapeamento de erros idênticos ao
-  que seriam contra uma API real.
-- **Capacidade de agendamento validada no cliente** — a regra de negócio
+  que seriam contra uma API de verdade.
+- **Capacidade de agendamento validada no cliente.** A regra
   (`domain/rules/scheduling-capacity.ts`) e o diálogo de conflito rodam hoje
-  inteiramente no Redux Saga, lendo as ordens já carregadas; o contrato em
+  inteiramente no Redux Saga, lendo as ordens já carregadas. O contrato em
   `openapi.yaml` já documenta a resposta `409 SCHEDULING_CAPACITY_EXCEEDED`
-  que um backend real deveria validar novamente do lado do servidor.
-- **`--forceExit` no Jest** — os interceptors do MSW mantêm um handle de
-  timer aberto no Node mesmo após `server.close()`; forçar a saída é o
-  ajuste pragmático recomendado pela própria comunidade do MSW para uso com
-  Jest, sem impacto nos resultados dos testes.
-- **Orquestração event-driven só onde há orquestração de verdade** — Redux
-  Saga modela o fluxo de agendamento como uma sequência de eventos
-  (`schedulingRequested` → checagem de capacidade → `schedulingConflictDetected`
-  → `schedulingConflictAcknowledged` → `schedulingSucceeded`/`schedulingFailed`),
-  o que também é o que torna esse fluxo (e só ele) fácil de logar ponto a
-  ponto. Os outros 90% da aplicação são CRUD request/response simples via
-  React Query; introduzir um barramento de eventos ali seria complexidade sem
-  ganho.
-- **Otimização de consultas fica nas fronteiras, não em gambiarra de cache** —
-  filtro e paginação de ordens/auditoria acontecem no "servidor" (handler
-  MSW), não no cliente; o cliente só pede a página que precisa e o React
-  Query deduplica/cacheia por `queryKey`. Isso evita tanto over-fetching
-  quanto lógica de filtro duplicada entre componentes.
-- **Autorização de negócio no domínio, não espalhada pela UI** — a regra de
-  "só posso usar um transporte autorizado para aquele cliente"
-  (`domain/rules/transport-auth.ts`) é aplicada no caso de uso de criação de
-  ordem e refletida na UI apenas como consequência (a lista de transportes
-  disponíveis já vem filtrada); a UI nunca decide sozinha o que é permitido.
-  Autenticação/autorização de usuário (login, papéis, permissões por rota)
-  está fora do escopo do desafio e não foi simulada.
+  que um backend real deveria validar de novo no servidor — não dá pra
+  confiar só na checagem client-side em produção.
+- **`--forceExit` no Jest.** Os interceptors do MSW mantêm um handle de timer
+  aberto no Node mesmo depois de `server.close()`. Forçar a saída é o ajuste
+  recomendado pela própria comunidade do MSW para uso com Jest, e não afeta o
+  resultado dos testes.
+- **Saga só onde há orquestração de verdade.** O fluxo de agendamento modela
+  uma sequência real de eventos (pedido → checagem de capacidade → conflito →
+  resposta do usuário → sucesso/erro), o que também é o que torna esse fluxo,
+  e só ele, fácil de logar ponto a ponto. Os outros 90% da aplicação são CRUD
+  request/response simples via React Query; um barramento de eventos ali
+  seria complexidade sem ganho.
+- **Filtro e paginação no "servidor", não no cliente.** Isso evita tanto
+  over-fetching quanto lógica de filtro duplicada entre componentes — o
+  cliente só pede a página que precisa, e o React Query cuida de deduplicar e
+  cachear por `queryKey`.
