@@ -5,6 +5,7 @@ import { advanceOrderStatus } from '@application/orders/update-order-status.use-
 import type { Order } from '@domain/entities/order'
 import { orderHttpRepository } from '@infrastructure/repositories/order.http-repository'
 import { orderKeys } from '@presentation/features/orders/api/orders.keys'
+import { auditKeys } from '@presentation/features/audit/api/audit.keys'
 import { useAppDispatch } from '@store/hooks'
 import { notify } from '@store/slices/notifications.slice'
 
@@ -16,6 +17,7 @@ export function useAdvanceOrderStatus() {
     mutationFn: (order: Order) => advanceOrderStatus(orderHttpRepository, order),
     onSuccess: (updated) => {
       queryClient.invalidateQueries({ queryKey: orderKeys.all })
+      queryClient.invalidateQueries({ queryKey: auditKeys.byOrder(updated.id) })
       queryClient.setQueryData(orderKeys.detail(updated.id), updated)
       dispatch(notify('success', 'Status da ordem atualizado'))
     },

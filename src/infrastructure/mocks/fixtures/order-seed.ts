@@ -14,6 +14,11 @@ function pick<T>(list: T[]): T {
   return list[randomInt(0, list.length - 1)]
 }
 
+function clampToNow(date: Date): Date {
+  const now = new Date()
+  return date > now ? now : date
+}
+
 function pickItems(): OrderItem[] {
   const count = randomInt(1, 4)
   const chosen = new Set<string>()
@@ -53,7 +58,7 @@ function buildOrder(targetStatus: OrderStatus): { order: Order; logs: AuditLog[]
   let scheduling: Order['scheduling'] = null
 
   for (let step = 1; step <= targetIndex; step++) {
-    cursor = addDays(cursor, randomInt(1, 3))
+    cursor = clampToNow(addDays(cursor, randomInt(1, 3)))
     const previous = ORDER_STATUS_SEQUENCE[step - 1]
     const next = ORDER_STATUS_SEQUENCE[step]
 

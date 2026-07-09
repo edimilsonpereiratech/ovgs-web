@@ -12,6 +12,8 @@ import { OrderSummaryCard } from '@presentation/features/orders/components/order
 import { useClients } from '@presentation/features/clients/api/use-clients'
 import { useItems } from '@presentation/features/items/api/use-items'
 import { useTransportTypes } from '@presentation/features/transport-types/api/use-transport-types'
+import { useOrderAuditLogs } from '@presentation/features/audit/api/use-order-audit-logs'
+import { OrderTimeline } from '@presentation/features/audit/components/order-timeline'
 import { CapacityConflictDialog } from '@presentation/features/scheduling/components/capacity-conflict-dialog'
 import { SchedulingForm } from '@presentation/features/scheduling/components/scheduling-form'
 import { useSchedulingFlow } from '@presentation/features/scheduling/api/use-scheduling-flow'
@@ -27,6 +29,7 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
   const { data: clients } = useClients()
   const { data: transportTypes } = useTransportTypes()
   const { data: items } = useItems()
+  const { data: auditLogs } = useOrderAuditLogs(orderId)
 
   const advanceStatusMutation = useAdvanceOrderStatus()
   const updateTransportMutation = useUpdateOrderTransport()
@@ -36,6 +39,10 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
   const [transportDraft, setTransportDraft] = useState('')
 
   const itemsById = useMemo(() => new Map((items ?? []).map((item) => [item.id, item])), [items])
+  const transportTypesById = useMemo(
+    () => new Map((transportTypes ?? []).map((type) => [type.id, type])),
+    [transportTypes],
+  )
   const client = clients?.find((candidate) => candidate.id === order?.clientId)
   const transportType = transportTypes?.find((candidate) => candidate.id === order?.transportTypeId)
   const authorizedTransportTypes = useMemo(
@@ -77,6 +84,13 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
       <div>
         <h2 className="mb-3 text-sm font-semibold text-text">Itens</h2>
         <OrderItemsTable orderItems={order.items} itemsById={itemsById} />
+      </div>
+
+      <div>
+        <h2 className="mb-3 text-sm font-semibold text-text">Histórico</h2>
+        <div className="rounded-lg border border-border bg-surface p-4">
+          <OrderTimeline logs={auditLogs ?? []} transportTypesById={transportTypesById} />
+        </div>
       </div>
 
       <div className="flex flex-wrap items-end gap-3 rounded-lg border border-border bg-surface p-4">

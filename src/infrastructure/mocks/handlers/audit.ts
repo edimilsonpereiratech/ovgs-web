@@ -12,8 +12,8 @@ export const auditHandlers = [
     let filtered = db.auditLogs
     if (orderId) filtered = filtered.filter((log) => log.orderId === orderId)
     if (action) filtered = filtered.filter((log) => log.action === action)
-    if (dateFrom) filtered = filtered.filter((log) => log.occurredAt >= dateFrom)
-    if (dateTo) filtered = filtered.filter((log) => log.occurredAt <= dateTo)
+    if (dateFrom) filtered = filtered.filter((log) => log.occurredAt.slice(0, 10) >= dateFrom)
+    if (dateTo) filtered = filtered.filter((log) => log.occurredAt.slice(0, 10) <= dateTo)
 
     const sorted = [...filtered].sort((a, b) => (a.occurredAt < b.occurredAt ? 1 : -1))
     return HttpResponse.json(sorted)

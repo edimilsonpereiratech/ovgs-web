@@ -5,6 +5,7 @@ import { useCallback, useEffect } from 'react'
 import type { Order } from '@domain/entities/order'
 import type { CreateSchedulingInput } from '@domain/entities/scheduling'
 import { orderKeys } from '@presentation/features/orders/api/orders.keys'
+import { auditKeys } from '@presentation/features/audit/api/audit.keys'
 import { useAppDispatch, useAppSelector } from '@store/hooks'
 import {
   schedulingConflictAcknowledged,
@@ -20,6 +21,7 @@ export function useSchedulingFlow() {
   useEffect(() => {
     if (!lastUpdatedOrder) return
     queryClient.invalidateQueries({ queryKey: orderKeys.all })
+    queryClient.invalidateQueries({ queryKey: auditKeys.byOrder(lastUpdatedOrder.id) })
     queryClient.setQueryData(orderKeys.detail(lastUpdatedOrder.id), lastUpdatedOrder)
   }, [lastUpdatedOrder, queryClient])
 
