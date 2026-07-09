@@ -21,6 +21,9 @@ components, dark mode e uma API REST inteiramente simulada por MSW.
 - [Como rodar](#como-rodar)
 - [Testes](#testes)
 - [Documentação da API](#documentação-da-api)
+- [Persistência](#persistência)
+- [Escalabilidade e performance](#escalabilidade-e-performance)
+- [Observabilidade](#observabilidade)
 - [Docker](#docker)
 - [CI](#ci)
 - [Decisões e trade-offs](#decisões-e-trade-offs)
@@ -190,6 +193,69 @@ códigos de erro usados pelo `error-mapper`) está em
 a referência para uma futura implementação real do backend: os handlers MSW
 em `src/infrastructure/mocks/handlers` seguem exatamente esse contrato.
 
+## Persistência
+
+Não há banco de dados: os handlers MSW (`src/infrastructure/mocks/handlers`)
+guardam o estado das entidades em arrays em memória, seedados uma vez por
+sessão do worker (`src/infrastructure/mocks/fixtures`) e mutados pelos
+próprios handlers a cada POST/PATCH — por isso criar uma ordem ou avançar um
+status "persiste" durante a sessão do browser, mas é perdido ao recarregar o
+service worker do zero. A única persistência real hoje é a preferência de
+tema (`localStorage`, `presentation/shared/hooks/use-theme.ts`).
+
+O ponto relevante para uma evolução futura é que nenhuma camada acima de
+`infrastructure` sabe disso: `application` só conhece os ports de repositório
+(`application/ports/*.repository.ts`), então trocar o MSW por um backend real
+com Postgres/Prisma é reescrever `infrastructure/repositories` (a
+implementação HTTP já existe e não mudaria) sem tocar em casos de uso,
+componentes ou testes de domínio/aplicação.
+
+## Escalabilidade e performance
+
+- **Paginação server-side** — a listagem de ordens (`GET /orders`) aceita
+  `page`/`pageSize` e filtros (status, cliente, transporte, período) no
+  próprio handler MSW, evitando trazer a base inteira para o cliente; o
+  mesmo contrato está documentado em `openapi.yaml` para quando existir uma
+  API real.
+- **Cache e `staleTime` por tipo de dado** (`lib/query-client.ts`,
+  `presentation/features/*/api/*.keys.ts`) — cadastros que mudam pouco
+  (clientes, itens, tipos de transporte) e listagens de ordens compartilham o
+  mesmo `QueryClient`, mas a invalidação é granular por `queryKey`, então
+  atualizar uma ordem não invalida o cache de clientes/itens.
+- **Memoização de dados derivados** — mapas (`Map<id, entidade>`) usados para
+  cruzar ordens com clientes/itens/tipos de transporte nas telas de detalhe,
+  monitoramento e agendamento são construídos com `useMemo`, evitando
+  recomputar a cada re-render.
+- **Code-splitting automático** — cada rota do App Router já é um chunk
+  separado; a página `/api-docs` isola a dependência pesada
+  `swagger-ui-react` do bundle principal do dashboard.
+- **Próximo passo natural** — se o volume de ordens crescer bastante,
+  virtualização de lista (`@tanstack/react-virtual`) na tabela de ordens seria
+  o próximo ajuste; não foi feito agora porque a paginação já resolve o
+  volume esperado para o desafio.
+
+## Observabilidade
+
+Existe um port `Logger` com um adapter de console (`src/lib/logger.ts`) —
+trocar para um provedor real (Sentry, Datadog, um endpoint de log próprio)
+significa escrever um novo adapter que implementa a mesma interface, sem
+tocar em quem consome `logger`. Ele está conectado em quatro pontos:
+
+- **React Query** (`lib/query-client.ts`) — `QueryCache`/`MutationCache`
+  logam toda falha de busca (com a `queryKey`) e toda mutação concluída/com
+  erro (com um `mutationKey` por operação, ex. `['orders', 'create']`).
+- **Saga de agendamento** (`store/sagas/orders.saga.ts`) — loga os pontos de
+  decisão do fluxo: início, conflito de capacidade detectado, resolução do
+  usuário (prosseguir ou cancelar) e sucesso/erro final.
+- **Web Vitals** (`app/web-vitals-reporter.tsx`, via `next/web-vitals`) —
+  reporta métricas de performance (LCP, CLS, INP etc.) assim que disponíveis.
+- **Navegação e interações** — `PageViewLogger`
+  (`app/page-view-logger.tsx`) loga toda mudança de rota, e o `Button`
+  compartilhado aceita uma prop opcional `trackingEvent` que loga a
+  interação no clique; ela é usada nas ações de negócio mais relevantes
+  (criar ordem, avançar status, atualizar transporte, abrir/confirmar/
+  reagendar agendamento) sem exigir alteração nos outros usos do componente.
+
 ## Docker
 
 ```bash
@@ -230,3 +296,23 @@ padrão, então portar para Azure Pipelines, GitLab CI ou qualquer outro runner
   timer aberto no Node mesmo após `server.close()`; forçar a saída é o
   ajuste pragmático recomendado pela própria comunidade do MSW para uso com
   Jest, sem impacto nos resultados dos testes.
+- **Orquestração event-driven só onde há orquestração de verdade** — Redux
+  Saga modela o fluxo de agendamento como uma sequência de eventos
+  (`schedulingRequested` → checagem de capacidade → `schedulingConflictDetected`
+  → `schedulingConflictAcknowledged` → `schedulingSucceeded`/`schedulingFailed`),
+  o que também é o que torna esse fluxo (e só ele) fácil de logar ponto a
+  ponto. Os outros 90% da aplicação são CRUD request/response simples via
+  React Query; introduzir um barramento de eventos ali seria complexidade sem
+  ganho.
+- **Otimização de consultas fica nas fronteiras, não em gambiarra de cache** —
+  filtro e paginação de ordens/auditoria acontecem no "servidor" (handler
+  MSW), não no cliente; o cliente só pede a página que precisa e o React
+  Query deduplica/cacheia por `queryKey`. Isso evita tanto over-fetching
+  quanto lógica de filtro duplicada entre componentes.
+- **Autorização de negócio no domínio, não espalhada pela UI** — a regra de
+  "só posso usar um transporte autorizado para aquele cliente"
+  (`domain/rules/transport-auth.ts`) é aplicada no caso de uso de criação de
+  ordem e refletida na UI apenas como consequência (a lista de transportes
+  disponíveis já vem filtrada); a UI nunca decide sozinha o que é permitido.
+  Autenticação/autorização de usuário (login, papéis, permissões por rota)
+  está fora do escopo do desafio e não foi simulada.
