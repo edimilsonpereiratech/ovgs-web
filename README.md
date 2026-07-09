@@ -1,6 +1,10 @@
 # OVGS — Sistema de Gestão de Ordens de Venda
 
-Frontend Sênior challenge: um sistema de **Ordens de Venda e Gestão de Suprimentos**
+![Monitoramento Operacional](docs/screenshots/monitoramento.png)
+
+**Preview:** [thera-alpha.vercel.app](https://thera-alpha.vercel.app)
+
+Sistema de **Ordens de Venda e Gestão de Suprimentos**
 construído em Next.js + TypeScript, com Clean Architecture, DDD, Smart/Dumb
 components, dark mode e uma API REST inteiramente simulada por MSW.
 
