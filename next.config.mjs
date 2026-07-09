@@ -1,17 +1,23 @@
+// 'unsafe-inline' on script/style is a deliberate relaxation: the theme
+// bootstrap script in app/layout.tsx is inline (it must run before hydration
+// to avoid a flash of the wrong theme) and swagger-ui-react injects inline
+// styles. A stricter policy would need a per-request nonce, which isn't worth
+// it for a project without a real backend. In development, webpack's Fast
+// Refresh runtime evaluates code via `eval`, so 'unsafe-eval' is added only
+// for `next dev` and never ships in the production build.
+const SCRIPT_SRC =
+  process.env.NODE_ENV === 'development'
+    ? "'self' 'unsafe-inline' 'unsafe-eval'"
+    : "'self' 'unsafe-inline'"
+
 const SECURITY_HEADERS = [
   { key: 'X-Content-Type-Options', value: 'nosniff' },
   { key: 'X-Frame-Options', value: 'DENY' },
   { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
   { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=()' },
   {
-    // 'unsafe-inline' on script/style is a deliberate relaxation: the theme
-    // bootstrap script in app/layout.tsx is inline (it must run before
-    // hydration to avoid a flash of the wrong theme) and swagger-ui-react
-    // injects inline styles. A stricter policy would need a per-request
-    // nonce, which isn't worth it for a project without a real backend.
     key: 'Content-Security-Policy',
-    value:
-      "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self';",
+    value: `default-src 'self'; script-src ${SCRIPT_SRC}; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self';`,
   },
 ]
 

@@ -27,7 +27,11 @@ const THEME_INIT_SCRIPT = `
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="pt-BR">
+    // suppressHydrationWarning is required here because THEME_INIT_SCRIPT
+    // mutates documentElement's class before React hydrates, to avoid a
+    // flash of the wrong theme. That intentional mismatch would otherwise
+    // surface as a "extra attributes from the server: class" warning.
+    <html lang="pt-BR" suppressHydrationWarning>
       <head>
         <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
       </head>
