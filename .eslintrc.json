@@ -1,3 +1,36 @@
 {
-  "extends": ["next/core-web-vitals", "next/typescript"]
+  "extends": ["next/core-web-vitals", "next/typescript"],
+  "plugins": ["boundaries"],
+  "settings": {
+    "boundaries/include": ["src/**/*"],
+    "boundaries/elements": [
+      { "type": "domain", "pattern": "src/domain/**/*" },
+      { "type": "application", "pattern": "src/application/**/*" },
+      { "type": "infrastructure", "pattern": "src/infrastructure/**/*" },
+      { "type": "store", "pattern": "src/store/**/*" },
+      { "type": "presentation", "pattern": "src/presentation/**/*" },
+      { "type": "lib", "pattern": "src/lib/**/*" },
+      { "type": "app", "pattern": "src/app/**/*" }
+    ]
+  },
+  "rules": {
+    "boundaries/element-types": [
+      "error",
+      {
+        "default": "disallow",
+        "rules": [
+          { "from": "domain", "allow": [] },
+          { "from": "application", "allow": ["domain"] },
+          { "from": "infrastructure", "allow": ["domain", "application"] },
+          { "from": "store", "allow": ["domain", "application", "infrastructure"] },
+          {
+            "from": "presentation",
+            "allow": ["domain", "application", "infrastructure", "store", "lib"]
+          },
+          { "from": "lib", "allow": ["domain"] },
+          { "from": "app", "allow": ["presentation", "store", "lib", "domain"] }
+        ]
+      }
+    ]
+  }
 }
