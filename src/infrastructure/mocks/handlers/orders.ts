@@ -19,8 +19,8 @@ function paginate(request: Request) {
   if (clientId) filtered = filtered.filter((order) => order.clientId === clientId)
   if (transportTypeId)
     filtered = filtered.filter((order) => order.transportTypeId === transportTypeId)
-  if (dateFrom) filtered = filtered.filter((order) => order.createdAt >= dateFrom)
-  if (dateTo) filtered = filtered.filter((order) => order.createdAt <= dateTo)
+  if (dateFrom) filtered = filtered.filter((order) => order.createdAt.slice(0, 10) >= dateFrom)
+  if (dateTo) filtered = filtered.filter((order) => order.createdAt.slice(0, 10) <= dateTo)
 
   const sorted = [...filtered].sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1))
   const start = (page - 1) * pageSize

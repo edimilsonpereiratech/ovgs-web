@@ -3,12 +3,23 @@ import type { TransportType } from '@domain/entities/transport-type'
 import { ORDER_STATUS_SEQUENCE, ORDER_STATUS_CONFIG } from '@domain/value-objects/order-status'
 import type { OrderStatus } from '@domain/value-objects/order-status'
 import { Button } from '@presentation/shared/components/ui/button'
+import { Input } from '@presentation/shared/components/ui/input'
 import { Select } from '@presentation/shared/components/ui/select'
 
 export interface OrderFiltersValue {
   status: OrderStatus | ''
   clientId: string
   transportTypeId: string
+  dateFrom: string
+  dateTo: string
+}
+
+export const EMPTY_ORDER_FILTERS: OrderFiltersValue = {
+  status: '',
+  clientId: '',
+  transportTypeId: '',
+  dateFrom: '',
+  dateTo: '',
 }
 
 interface OrderFiltersProps {
@@ -57,11 +68,19 @@ export function OrderFilters({ value, clients, transportTypes, onChange }: Order
           </option>
         ))}
       </Select>
-      <Button
-        variant="secondary"
-        size="md"
-        onClick={() => onChange({ status: '', clientId: '', transportTypeId: '' })}
-      >
+      <Input
+        label="De"
+        type="date"
+        value={value.dateFrom}
+        onChange={(event) => onChange({ ...value, dateFrom: event.target.value })}
+      />
+      <Input
+        label="Até"
+        type="date"
+        value={value.dateTo}
+        onChange={(event) => onChange({ ...value, dateTo: event.target.value })}
+      />
+      <Button variant="secondary" size="md" onClick={() => onChange({ ...EMPTY_ORDER_FILTERS })}>
         Limpar filtros
       </Button>
     </div>
