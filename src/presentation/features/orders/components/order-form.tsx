@@ -90,7 +90,12 @@ export function OrderForm({
         {...register('observations')}
       />
 
-      <Button type="submit" disabled={isSubmitting} className="self-start">
+      <Button
+        type="submit"
+        disabled={isSubmitting}
+        className="self-start"
+        trackingEvent="order.create.submit"
+      >
         {isSubmitting ? 'Criando ordem...' : 'Criar ordem de venda'}
       </Button>
     </form>

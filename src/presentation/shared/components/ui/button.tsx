@@ -1,5 +1,6 @@
 import { forwardRef, type ButtonHTMLAttributes } from 'react'
 import { cn } from '@lib/cn'
+import { logger } from '@lib/logger'
 
 type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger'
 type ButtonSize = 'sm' | 'md'
@@ -7,6 +8,8 @@ type ButtonSize = 'sm' | 'md'
 interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: ButtonVariant
   size?: ButtonSize
+  /** Nome do evento de interação a ser logado quando o botão é clicado. */
+  trackingEvent?: string
 }
 
 const VARIANT_CLASSES: Record<ButtonVariant, string> = {
@@ -22,7 +25,18 @@ const SIZE_CLASSES: Record<ButtonSize, string> = {
 }
 
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
-  ({ className, variant = 'primary', size = 'md', type = 'button', ...props }, ref) => (
+  (
+    {
+      className,
+      variant = 'primary',
+      size = 'md',
+      type = 'button',
+      trackingEvent,
+      onClick,
+      ...props
+    },
+    ref,
+  ) => (
     <button
       ref={ref}
       type={type}
@@ -32,6 +46,12 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
         SIZE_CLASSES[size],
         className,
       )}
+      onClick={(event) => {
+        if (trackingEvent) {
+          logger.info('Interação de usuário', { event: trackingEvent })
+        }
+        onClick?.(event)
+      }}
       {...props}
     />
   ),

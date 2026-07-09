@@ -50,7 +50,12 @@ export function ScheduledAgenda({
                       {transportTypesById.get(order.transportTypeId)?.name ?? order.transportTypeId}
                     </span>
                   </div>
-                  <Button variant="secondary" size="sm" onClick={() => onReschedule(order)}>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => onReschedule(order)}
+                    trackingEvent="order.scheduling.open"
+                  >
                     Reagendar
                   </Button>
                 </div>

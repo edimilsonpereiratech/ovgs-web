@@ -99,6 +99,7 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
           <Button
             disabled={advanceStatusMutation.isPending}
             onClick={() => advanceStatusMutation.mutate(order)}
+            trackingEvent="order.status.advance"
           >
             Avançar para {ORDER_STATUS_CONFIG[nextStatus].label}
           </Button>
@@ -109,6 +110,7 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
             variant="secondary"
             disabled={isProcessing}
             onClick={() => setSchedulingOpen(true)}
+            trackingEvent="order.scheduling.open"
           >
             {order.status === 'PLANEJADA' ? 'Confirmar agendamento' : 'Reagendar entrega'}
           </Button>
@@ -139,6 +141,7 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
                   transportTypeId: transportDraft,
                 })
               }
+              trackingEvent="order.transport.update"
             >
               Atualizar
             </Button>

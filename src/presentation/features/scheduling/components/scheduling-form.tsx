@@ -62,7 +62,12 @@ export function SchedulingForm({ isSubmitting, onSubmit }: SchedulingFormProps) 
           </Select>
         )}
       />
-      <Button type="submit" disabled={isSubmitting} className="mt-2">
+      <Button
+        type="submit"
+        disabled={isSubmitting}
+        className="mt-2"
+        trackingEvent="order.scheduling.submit"
+      >
         {isSubmitting ? 'Salvando...' : 'Confirmar'}
       </Button>
     </form>

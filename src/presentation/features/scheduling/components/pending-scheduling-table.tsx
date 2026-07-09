@@ -46,7 +46,11 @@ export function PendingSchedulingTable({
             </TableCell>
             <TableCell className="text-text-muted">{formatDateTime(order.updatedAt)}</TableCell>
             <TableCell className="text-right">
-              <Button size="sm" onClick={() => onSchedule(order)}>
+              <Button
+                size="sm"
+                onClick={() => onSchedule(order)}
+                trackingEvent="order.scheduling.open"
+              >
                 Confirmar agendamento
               </Button>
             </TableCell>
