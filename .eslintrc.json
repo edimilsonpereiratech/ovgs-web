@@ -74,7 +74,9 @@
             "allow": {
               "to": {
                 "element": {
-                  "types": { "anyOf": ["presentation", "store", "lib", "domain", "app"] }
+                  "types": {
+                    "anyOf": ["presentation", "store", "lib", "domain", "infrastructure", "app"]
+                  }
                 }
               }
             }
