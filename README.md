@@ -206,12 +206,15 @@ npm run format:check         # Prettier --check
 npm run test
 ```
 
-Testes de unidade cobrem as regras de domínio puras (`order-state-machine`,
+Testes de unidade cobrem os schemas Zod de `domain/entities` (o que cada um
+aceita e rejeita), as regras de domínio puras (`order-state-machine`,
 `scheduling-capacity`, `transport-auth`), os casos de uso de `application`
-(criação de ordem, avanço de status, agendamento) e o mapeador de erros HTTP →
-domínio — nenhum deles depende de React ou de rede, então rodam em
+(criação de ordem, avanço de status, agendamento) e o mapeador/cliente HTTP de
+`infrastructure` — nenhum deles depende de React ou de rede, então rodam em
 milissegundos e servem de rede de segurança para qualquer refatoração futura
-das regras de negócio.
+das regras de negócio. `npm run test:coverage` fecha em 100% de statements,
+branches, funções e linhas nesse escopo (`domain`, `application`,
+`infrastructure/http`, conforme `collectCoverageFrom` em `jest.config.ts`).
 
 Testes de integração renderizam os containers com React Testing Library sobre
 providers reais (React Query + Redux + toasts), com o MSW interceptando as

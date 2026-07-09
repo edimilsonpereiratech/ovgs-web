@@ -68,4 +68,17 @@ describe('mapHttpError', () => {
     const original = new Error('Erro genérico')
     expect(mapHttpError(original)).toBe(original)
   })
+
+  it('wraps a non-axios, non-Error value in a generic error', () => {
+    const mapped = mapHttpError('algo deu errado')
+    expect(mapped).toBeInstanceOf(Error)
+    expect(mapped.message).toBe('Erro inesperado. Tente novamente.')
+  })
+
+  it('falls back to a generic message when the response body has no message', () => {
+    const error = buildAxiosError(500, {})
+
+    const mapped = mapHttpError(error)
+    expect(mapped.message).toBe('Erro inesperado. Tente novamente.')
+  })
 })
