@@ -23,8 +23,8 @@ export function Providers({ children }: { children: React.ReactNode }) {
 
   if (!isReady) {
     return (
-      <div className="flex h-screen items-center justify-center bg-[var(--surface-alt)]">
-        <div className="h-8 w-8 animate-spin rounded-full border-2 border-[var(--border)] border-t-[var(--primary)]" />
+      <div className="flex h-screen items-center justify-center bg-surface-alt">
+        <div className="h-8 w-8 animate-spin rounded-full border-2 border-border border-t-primary" />
       </div>
     )
   }
