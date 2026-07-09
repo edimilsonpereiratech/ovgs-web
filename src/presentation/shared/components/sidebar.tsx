@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation'
 import {
   Boxes,
   CalendarClock,
+  FileCode2,
   History,
   LayoutDashboard,
   PanelLeftClose,
@@ -26,6 +27,7 @@ const NAV_ITEMS = [
   { href: '/tipos-transporte', label: 'Tipos de Transporte', icon: Truck },
   { href: '/itens', label: 'Itens', icon: Boxes },
   { href: '/auditoria', label: 'Auditoria', icon: History },
+  { href: '/api-docs', label: 'Documentação da API', icon: FileCode2, external: true },
 ]
 
 export function Sidebar() {
@@ -57,11 +59,13 @@ export function Sidebar() {
 
       <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-4">
         {NAV_ITEMS.map((item) => {
-          const isActive = pathname?.startsWith(item.href)
+          const isActive = !item.external && pathname?.startsWith(item.href)
           return (
             <Link
               key={item.href}
               href={item.href}
+              target={item.external ? '_blank' : undefined}
+              rel={item.external ? 'noopener noreferrer' : undefined}
               className={cn(
                 'flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors',
                 isActive

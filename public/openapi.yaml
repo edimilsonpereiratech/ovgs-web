@@ -1,0 +1,632 @@
+openapi: 3.0.3
+info:
+  title: OVGS API — Ordens de Venda e Gestão de Suprimentos
+  description: >
+    Contrato REST consumido pelo frontend do OVGS. Nesta entrega o backend é
+    simulado inteiramente pelo MSW (`src/infrastructure/mocks`), com os mesmos
+    endpoints, status codes e formatos de erro descritos aqui — este documento
+    é a fonte da verdade para uma futura implementação real da API.
+  version: 1.0.0
+servers:
+  - url: /api
+    description: Base path relativo utilizado pelo cliente HTTP (axios)
+
+tags:
+  - name: Clients
+    description: Cadastro de clientes e seus transportes autorizados
+  - name: TransportTypes
+    description: Cadastro de tipos de transporte
+  - name: Items
+    description: Cadastro de itens (SKU) disponíveis para composição de ordens
+  - name: Orders
+    description: Ciclo de vida das ordens de venda — criação, status e agendamento
+  - name: AuditLogs
+    description: Trilha de auditoria imutável de eventos das ordens
+
+paths:
+  /clients:
+    get:
+      tags: [Clients]
+      summary: Lista todos os clientes
+      responses:
+        '200':
+          description: Lista de clientes
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Client'
+    post:
+      tags: [Clients]
+      summary: Cria um novo cliente
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateClientInput'
+      responses:
+        '201':
+          description: Cliente criado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Client'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+  /clients/{id}:
+    parameters:
+      - $ref: '#/components/parameters/IdParam'
+    put:
+      tags: [Clients]
+      summary: Atualiza um cliente existente
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateClientInput'
+      responses:
+        '200':
+          description: Cliente atualizado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Client'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /transport-types:
+    get:
+      tags: [TransportTypes]
+      summary: Lista todos os tipos de transporte
+      responses:
+        '200':
+          description: Lista de tipos de transporte
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TransportType'
+    post:
+      tags: [TransportTypes]
+      summary: Cria um novo tipo de transporte
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTransportTypeInput'
+      responses:
+        '201':
+          description: Tipo de transporte criado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransportType'
+
+  /transport-types/{id}:
+    parameters:
+      - $ref: '#/components/parameters/IdParam'
+    put:
+      tags: [TransportTypes]
+      summary: Atualiza um tipo de transporte existente
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTransportTypeInput'
+      responses:
+        '200':
+          description: Tipo de transporte atualizado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransportType'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /items:
+    get:
+      tags: [Items]
+      summary: Lista todos os itens
+      responses:
+        '200':
+          description: Lista de itens
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Item'
+    post:
+      tags: [Items]
+      summary: Cria um novo item
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateItemInput'
+      responses:
+        '201':
+          description: Item criado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Item'
+        '409':
+          description: SKU já cadastrado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                code: DUPLICATE_SKU
+                message: SKU já cadastrado.
+                meta: { sku: 'SKU-0001' }
+
+  /orders:
+    get:
+      tags: [Orders]
+      summary: Lista ordens de venda com filtros e paginação
+      parameters:
+        - in: query
+          name: status
+          schema:
+            $ref: '#/components/schemas/OrderStatus'
+        - in: query
+          name: clientId
+          schema: { type: string, format: uuid }
+        - in: query
+          name: transportTypeId
+          schema: { type: string, format: uuid }
+        - in: query
+          name: dateFrom
+          schema: { type: string, format: date }
+        - in: query
+          name: dateTo
+          schema: { type: string, format: date }
+        - in: query
+          name: page
+          schema: { type: integer, minimum: 1, default: 1 }
+        - in: query
+          name: pageSize
+          schema: { type: integer, minimum: 1, default: 10 }
+      responses:
+        '200':
+          description: Página de ordens de venda
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedOrders'
+    post:
+      tags: [Orders]
+      summary: Cria uma nova ordem de venda
+      description: >
+        O transporte informado deve estar na lista de transportes autorizados
+        do cliente (`Client.authorizedTransportTypeIds`), caso contrário a API
+        retorna 422 com o código `TRANSPORT_NOT_AUTHORIZED`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateOrderInput'
+      responses:
+        '201':
+          description: Ordem criada com status inicial CRIADA
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Order'
+        '422':
+          description: Transporte não autorizado para o cliente
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                code: TRANSPORT_NOT_AUTHORIZED
+                message: Transporte não autorizado para este cliente.
+                meta: { clientId: '...', transportTypeId: '...' }
+
+  /orders/{id}:
+    parameters:
+      - $ref: '#/components/parameters/IdParam'
+    get:
+      tags: [Orders]
+      summary: Busca uma ordem de venda pelo id
+      responses:
+        '200':
+          description: Ordem encontrada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Order'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /orders/{id}/status:
+    parameters:
+      - $ref: '#/components/parameters/IdParam'
+    patch:
+      tags: [Orders]
+      summary: Avança a ordem para o próximo status da sequência
+      description: >
+        A máquina de estados só permite avançar sequencialmente
+        (CRIADA → PLANEJADA → AGENDADA → EM_TRANSPORTE → ENTREGUE). Qualquer
+        outra transição retorna 422 com o código `INVALID_TRANSITION`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status:
+                  $ref: '#/components/schemas/OrderStatus'
+      responses:
+        '200':
+          description: Ordem com status atualizado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Order'
+        '422':
+          description: Transição de status inválida
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                code: INVALID_TRANSITION
+                message: Transição de status inválida.
+                meta: { from: CRIADA, to: EM_TRANSPORTE }
+
+  /orders/{id}/transport:
+    parameters:
+      - $ref: '#/components/parameters/IdParam'
+    patch:
+      tags: [Orders]
+      summary: Altera o tipo de transporte de uma ordem ainda não planejada
+      description: >
+        Só é permitido enquanto a ordem está no status CRIADA (retorna 422
+        com o código `TRANSPORT_CHANGE_NOT_ALLOWED` caso contrário) e o novo
+        transporte precisa estar autorizado para o cliente da ordem (422 com
+        `TRANSPORT_NOT_AUTHORIZED`).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [transportTypeId]
+              properties:
+                transportTypeId: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Ordem com transporte atualizado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Order'
+        '422':
+          description: Transporte não autorizado ou ordem já avançou de status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                code: TRANSPORT_CHANGE_NOT_ALLOWED
+                message: Só é possível alterar o transporte enquanto a ordem estiver CRIADA
+
+  /orders/{id}/scheduling:
+    parameters:
+      - $ref: '#/components/parameters/IdParam'
+    post:
+      tags: [Orders]
+      summary: Confirma o agendamento de uma ordem PLANEJADA
+      description: >
+        Só é permitido confirmar o agendamento quando a ordem está no status
+        PLANEJADA; qualquer outro status retorna 422 com o código
+        `SCHEDULING_NOT_ALLOWED`. Se a janela de entrega já tiver atingido a
+        capacidade máxima, a API deve retornar 409 com o código
+        `SCHEDULING_CAPACITY_EXCEEDED` — nesta entrega a verificação de
+        capacidade (`src/domain/rules/scheduling-capacity.ts`) roda no cliente,
+        via Redux Saga (`src/store/sagas/orders.saga.ts`), que lê as ordens já
+        agendadas e simula esta mesma resposta antes mesmo de chamar a API;
+        o contrato abaixo é o que o backend real deve implementar.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateSchedulingInput'
+      responses:
+        '200':
+          description: Ordem agendada (status AGENDADA)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Order'
+        '409':
+          description: Capacidade máxima de entregas da janela excedida
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                code: SCHEDULING_CAPACITY_EXCEEDED
+                message: Capacidade máxima de entregas atingida para esta janela.
+                meta: { count: 8 }
+        '422':
+          description: Ordem não está no status PLANEJADA
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /orders/{id}/scheduling/reschedule:
+    parameters:
+      - $ref: '#/components/parameters/IdParam'
+    patch:
+      tags: [Orders]
+      summary: Reagenda a entrega de uma ordem já AGENDADA
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateSchedulingInput'
+      responses:
+        '200':
+          description: Ordem reagendada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Order'
+        '409':
+          description: Capacidade máxima de entregas da janela excedida
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '422':
+          description: Ordem nunca foi agendada (status diferente de AGENDADA)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /audit-logs:
+    get:
+      tags: [AuditLogs]
+      summary: Lista eventos de auditoria com filtros
+      parameters:
+        - in: query
+          name: orderId
+          schema: { type: string, format: uuid }
+        - in: query
+          name: action
+          schema:
+            $ref: '#/components/schemas/AuditAction'
+        - in: query
+          name: dateFrom
+          schema: { type: string, format: date }
+        - in: query
+          name: dateTo
+          schema: { type: string, format: date }
+      responses:
+        '200':
+          description: Lista de eventos de auditoria, mais recentes primeiro
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AuditLog'
+
+components:
+  parameters:
+    IdParam:
+      in: path
+      name: id
+      required: true
+      schema: { type: string, format: uuid }
+
+  responses:
+    NotFound:
+      description: Recurso não encontrado
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiError'
+    ValidationError:
+      description: Corpo da requisição inválido
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiError'
+
+  schemas:
+    ApiError:
+      type: object
+      description: >
+        Formato uniforme de erro. `code` é usado por
+        `src/infrastructure/http/error-mapper.ts` para mapear a resposta HTTP
+        para um erro de domínio tipado; `meta` carrega dados contextuais
+        (ex.: status de origem/destino de uma transição inválida).
+      properties:
+        code: { type: string, example: INVALID_TRANSITION }
+        message: { type: string, example: Transição de status inválida. }
+        meta:
+          type: object
+          additionalProperties: true
+
+    OrderStatus:
+      type: string
+      enum: [CRIADA, PLANEJADA, AGENDADA, EM_TRANSPORTE, ENTREGUE]
+
+    AuditAction:
+      type: string
+      enum: [ORDER_CREATED, STATUS_CHANGED, SCHEDULING_CHANGED, TRANSPORT_CHANGED]
+
+    DeliveryWindow:
+      type: object
+      required: [start, end]
+      properties:
+        start: { type: string, pattern: '^\d{2}:\d{2}$', example: '08:00' }
+        end: { type: string, pattern: '^\d{2}:\d{2}$', example: '10:00' }
+
+    Client:
+      type: object
+      required: [id, name, document, authorizedTransportTypeIds, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string, minLength: 2 }
+        document: { type: string, minLength: 11, description: 'CNPJ/CPF' }
+        authorizedTransportTypeIds:
+          type: array
+          items: { type: string, format: uuid }
+        createdAt: { type: string, format: date-time }
+
+    CreateClientInput:
+      type: object
+      required: [name, document, authorizedTransportTypeIds]
+      properties:
+        name: { type: string, minLength: 2 }
+        document: { type: string, minLength: 11 }
+        authorizedTransportTypeIds:
+          type: array
+          items: { type: string, format: uuid }
+
+    TransportType:
+      type: object
+      required: [id, name, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string, minLength: 2 }
+        createdAt: { type: string, format: date-time }
+
+    CreateTransportTypeInput:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string, minLength: 2 }
+
+    Item:
+      type: object
+      required: [id, sku, name, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        sku: { type: string, minLength: 3 }
+        name: { type: string, minLength: 2 }
+        createdAt: { type: string, format: date-time }
+
+    CreateItemInput:
+      type: object
+      required: [sku, name]
+      properties:
+        sku: { type: string, minLength: 3 }
+        name: { type: string, minLength: 2 }
+
+    OrderItem:
+      type: object
+      required: [itemId, quantity]
+      properties:
+        itemId: { type: string, format: uuid }
+        quantity: { type: integer, minimum: 1 }
+
+    Scheduling:
+      type: object
+      required: [orderId, deliveryDate, timeWindow, confirmedAt, rescheduledFrom]
+      properties:
+        orderId: { type: string, format: uuid }
+        deliveryDate: { type: string, format: date }
+        timeWindow:
+          $ref: '#/components/schemas/DeliveryWindow'
+        confirmedAt:
+          type: string
+          format: date-time
+          nullable: true
+        rescheduledFrom:
+          type: string
+          format: date
+          nullable: true
+
+    CreateSchedulingInput:
+      type: object
+      required: [deliveryDate, timeWindow]
+      properties:
+        deliveryDate: { type: string, format: date }
+        timeWindow:
+          $ref: '#/components/schemas/DeliveryWindow'
+
+    Order:
+      type: object
+      required: [id, clientId, transportTypeId, items, status, scheduling, createdAt, updatedAt]
+      properties:
+        id: { type: string, format: uuid }
+        clientId: { type: string, format: uuid }
+        transportTypeId: { type: string, format: uuid }
+        items:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/OrderItem'
+        status:
+          $ref: '#/components/schemas/OrderStatus'
+        scheduling:
+          allOf:
+            - $ref: '#/components/schemas/Scheduling'
+          nullable: true
+        observations: { type: string, maxLength: 500 }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    CreateOrderInput:
+      type: object
+      required: [clientId, transportTypeId, items]
+      properties:
+        clientId: { type: string, format: uuid }
+        transportTypeId: { type: string, format: uuid }
+        items:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/OrderItem'
+        observations: { type: string, maxLength: 500 }
+
+    PaginatedOrders:
+      type: object
+      required: [items, total, page, pageSize]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Order'
+        total: { type: integer }
+        page: { type: integer }
+        pageSize: { type: integer }
+
+    AuditLog:
+      type: object
+      required: [id, orderId, action, previousState, newState, occurredAt]
+      properties:
+        id: { type: string, format: uuid }
+        orderId: { type: string, format: uuid }
+        action:
+          $ref: '#/components/schemas/AuditAction'
+        previousState:
+          type: string
+          nullable: true
+        newState:
+          type: string
+          nullable: true
+        occurredAt: { type: string, format: date-time }
